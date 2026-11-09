@@ -12,8 +12,14 @@ set -euo pipefail
 BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- toolchain ---
-export ANDROID_HOME="$BASE/sdk"
+# F-Droid's buildserver provides the SDK/JDK itself: honour the environment
+# when set, fall back to the bundled copies under this directory otherwise.
+export ANDROID_HOME="${ANDROID_HOME:-$BASE/sdk}"
+if [ -n "${JAVA_HOME:-}" ]; then
+    JAVA_HOME_CANDIDATE="$JAVA_HOME"
+else
 JAVA_HOME_CANDIDATE="$(ls -d "$BASE"/jdk/jdk-* 2>/dev/null | head -1 || true)"
+fi
 if [ -z "$JAVA_HOME_CANDIDATE" ]; then
     echo "error: no JDK found under $BASE/jdk/" >&2
     exit 1
@@ -35,11 +41,16 @@ OUT="${2:-$BASE/gakufu.apk}"
 mkdir -p "$(dirname "$OUT")"
 
 SHELL_DIR="$BASE/shell"
+# Fresh clones of the repo keep the shell files directly under android/
+# (no shell/ subdir); fall back to the script's own directory then.
+[ -d "$SHELL_DIR" ] || SHELL_DIR="$BASE"
 WORK="$BASE/build"
 KS="$BASE/keystore.jks"
 KS_PASS_FILE="$BASE/keystore-password.txt"
+if [ "${JSCOREFOLIO_UNSIGNED:-0}" != "1" ]; then
 [ -f "$KS" ] || { echo "error: keystore not found: $KS" >&2; exit 1; }
 [ -f "$KS_PASS_FILE" ] || { echo "error: keystore password file not found: $KS_PASS_FILE" >&2; exit 1; }
+fi
 
 echo "== staging app =="
 rm -rf "$WORK"
@@ -60,8 +71,8 @@ echo "== aapt2 compile + link =="
     --manifest "$WORK/app/AndroidManifest.xml" \
     --min-sdk-version 29 \
     --target-sdk-version 34 \
-    --version-code 1 \
-    --version-name "1.0" \
+    --version-code "${VERSION_CODE:-1}" \
+    --version-name "${VERSION_NAME:-1.0}" \
     -A "$WORK/app/assets" \
     "$WORK/compiled/res.zip"
 
@@ -86,15 +97,24 @@ echo "== add classes.dex, zipalign, sign =="
 # NOTE: no separate --key-pass; keytool was given keypass == storepass, and
 # apksigner falls back to the keystore password for the key. (Passing the same
 # file: source twice fails: apksigner consumes one line per password prompt.)
+if [ "${JSCOREFOLIO_UNSIGNED:-0}" = "1" ]; then
+    echo "== unsigned build requested: skipping apksigner (F-Droid signs) =="
+    cp "$WORK/aligned.apk" "$OUT"
+else
 "$APKSIGNER" sign \
     --ks "$KS" \
     --ks-key-alias gakufu \
     --ks-pass "file:$KS_PASS_FILE" \
     --out "$OUT" \
     "$WORK/aligned.apk"
+fi
 
 echo "== verify =="
+if [ "${JSCOREFOLIO_UNSIGNED:-0}" != "1" ]; then
 "$APKSIGNER" verify --verbose "$OUT"
+else
+echo "(unsigned build: apksigner verify skipped)"
+fi
 
 echo
 echo "built: $OUT"

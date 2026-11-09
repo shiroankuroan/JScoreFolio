@@ -1,4 +1,4 @@
-package jp.oka.gakufu;
+package jp.ker.jscorefolio;
 
 import android.app.Activity;
 import android.app.DownloadManager;

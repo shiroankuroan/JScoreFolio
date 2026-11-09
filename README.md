@@ -64,7 +64,7 @@ HTMLを開けばiOSでも動作するはずですが、未確認です。
 （そのままインストールできます）。
 
 ### シェルの仕様
-- パッケージ名 `jp.oka.gakufu`、アプリ名（ラベル）「JScoreFolio」
+- パッケージ名 `jp.ker.jscorefolio`、アプリ名（ラベル）「JScoreFolio」
 - minSdk 29 / targetSdk 34、**権限なし**（マニフェストに
   uses-permission を宣言していません）
 - 全画面（没入型、スワイプで一時表示）＋画面 ON 維持
@@ -157,7 +157,7 @@ keytool -genkeypair -v -keystore keystore.jks -alias gakufu \
 
 ## バージョン履歴
 
-- **1.3（名称変更）**
+- **1.3（名称変更）**: GitHub 公開にあたり、表示名を「楽譜表示」から **JScoreFolio** に変更し、パッケージ名も `jp.ker.jscorefolio` に変更（旧版とは別アプリ扱いになり、書き込みデータは引き継がれません）。サンプル楽譜は権利の都合で自作の「サンプル譜」に差し替え
 
 - **1.0**: 初版 APK
 - **1.1**: 文字サイズのスライダー化、書き込み入り PDF の書き出し、
@@ -188,7 +188,7 @@ keytool -genkeypair -v -keystore keystore.jks -alias gakufu \
   （vendored）しています。文書由来の動的コード生成（PostScript
   関数の JIT）は除去し、インタプリタによる代替に落としたビルドです。
   pdf.js 本体は Apache License 2.0 です
-- **サンプル楽譜「二葉のかおり」**: アプリ内に同梱され、初回起動時に
+- **サンプル楽譜「サンプル譜」（オリジナル）**: アプリ内に同梱され、初回起動時に
   自動で取り込まれます
 
 ## ライセンス
@@ -202,6 +202,7 @@ Copyright (c) 2026 ker
 ただし、同梱物にはそれぞれ別の条件があります:
 
 - **pdf.js** は Apache License 2.0 です
+- **サンプル楽譜「サンプル譜」** は本ソフトウェアの一部として、同じ MIT ライセンスの対象です
 
 ## リリースの内容
 
@@ -215,6 +216,6 @@ JScoreFolio/
     AndroidManifest.xml
     build-apk.sh       # 手組みビルドスクリプト
     res/               # アイコンと色定義
-    src/jp/ker/gakufu/MainActivity.java
+    src/jp/ker/jscorefolio/MainActivity.java
   JScoreFolio-1.3.apk  # ビルド済み APK（インストール用サンプル）
 ```

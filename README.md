@@ -1,4 +1,4 @@
-# JScoreFolio（楽譜表示）
+# JScoreFolio（邦楽用楽譜表示アプリ）
 
 ## English abstract
 
@@ -13,15 +13,12 @@ runs entirely offline in a browser; an optional Android WebView shell
 
 ## このアプリについて
 
-日本の伝統音楽の縦譜（右から左へ、上から下へ読む縦書きの楽譜）のための
-PDF ビューアです。PDF の楽譜を開き、そのページの上に重ねて書き込みがで
-きます。アプリ本体は単一の HTML ファイルで、ネットワークなしで動作し
-ます。想定する使い方のひとつは、LineageOS を入れた Android タブレット
-で APK 版を使い、Bluetooth フットペダル（LEKATO のページターナー）で
-譜めくりをしながら演奏することです。
+尺八の譜面、箏曲の譜面等の邦楽の縦譜（右から左へ、上から下へ読む縦書きの楽譜）
+用のPDF ビューアです。PDF の楽譜を開き、楽譜にコメントや線を引くことが出来ます。
+アプリ本体は単一の HTML ファイルで、ネットワークなしで動作します。
+LineageOS上でBluetooth フットペダルを使用するのを前提で作成しています。
 
-同梱のサンプル楽譜は「二葉のかおり」（3 ページ）で、初回起動時に自動で
-ライブラリへ取り込まれます。
+サンプルとしてPDFが入っています。
 
 ## 機能
 
@@ -49,8 +46,7 @@ PDF ビューアです。PDF の楽譜を開き、そのページの上に重ね
 てもかまいません。実行時に外部リソースへは一切アクセスしません（PDF
 描画ライブラリもサンプル楽譜もファイル内に同梱されています）。
 
-## データの持ち方
-
+## データの取り扱い方について
 - **元の PDF ファイルは変更しません**。書き込みは元の PDF とは別の
   データとして保持します
 - 取り込んだ PDF と、ページごとの書き込みは、ブラウザの **IndexedDB**
@@ -61,13 +57,11 @@ PDF ビューアです。PDF の楽譜を開き、そのページの上に重ね
   ます（描画したページ画像に書き込みを合成した新しい PDF ができます）
 
 ## Android APK
-
 `android/` には、Web 版を Android アプリとして包むための薄い WebView
 シェルが入っています。できあがった APK の例が `JScoreFolio-1.3.apk` です
 （そのままインストールできます）。
 
 ### シェルの仕様
-
 - パッケージ名 `jp.oka.gakufu`、アプリ名（ラベル）「JScoreFolio」
 - minSdk 29 / targetSdk 34、**権限なし**（マニフェストに
   uses-permission を宣言していません）
@@ -161,7 +155,7 @@ keytool -genkeypair -v -keystore keystore.jks -alias gakufu \
 
 ## バージョン履歴
 
-- **1.3（名称変更）**: GitHub 公開にあたり、表示名を「楽譜表示」から **JScoreFolio** に変更。機能は 1.3 のまま。パッケージ名は `jp.oka.gakufu` のままなので、旧版からの上書き更新と書き込みデータの引き継ぎが可能
+- **1.3（名称変更）**
 
 - **1.0**: 初版 APK
 - **1.1**: 文字サイズのスライダー化、書き込み入り PDF の書き出し、
@@ -177,6 +171,7 @@ keytool -genkeypair -v -keystore keystore.jks -alias gakufu \
 
 ## 既知の制限・注意
 
+- このアプリはMuse(muse.ai)で作成されています。
 - 線・ペンのドラッグ描画の感触とピンチ操作は、ロジックとしては
   検証済みですが、最終的な感触の確認は作者が実機タブレットで行った
   ものです
@@ -205,8 +200,6 @@ Copyright (c) 2026 ker
 ただし、同梱物にはそれぞれ別の条件があります:
 
 - **pdf.js** は Apache License 2.0 です
-- **サンプル楽譜「二葉のかおり」** の権利は原権利者にあります。
-  本ライセンス（MIT）はこの楽譜には適用されません
 
 ## リリースの内容
 
@@ -220,6 +213,6 @@ JScoreFolio/
     AndroidManifest.xml
     build-apk.sh       # 手組みビルドスクリプト
     res/               # アイコンと色定義
-    src/jp/oka/gakufu/MainActivity.java
+    src/jp/ker/gakufu/MainActivity.java
   JScoreFolio-1.3.apk  # ビルド済み APK（インストール用サンプル）
 ```

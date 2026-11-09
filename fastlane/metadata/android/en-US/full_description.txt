@@ -1,0 +1,5 @@
+JScoreFolio is an offline viewer for traditional Japanese vertical-notation sheet music (tatefu / 縦譜, read right-to-left, top-to-bottom), such as shakuhachi and koto scores.
+
+Open a PDF score and annotate directly on the pages: vertical-text comments, snapped straight lines, and freehand pen. Margins are cropped automatically per page, and a Bluetooth foot pedal turns pages.
+
+The app is a single self-contained HTML file running entirely offline. It needs no network permission, has no ads and no trackers, and the bundled pdf.js is Apache-2.0. Annotations are stored on-device and can be exported as a new PDF with the writing baked in. The original PDF is never modified.

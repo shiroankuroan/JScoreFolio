@@ -1,0 +1,1 @@
+1.4: the edit tool hides while an annotation is being dragged; the edit tool can be dragged by the grip at its top (position is remembered, double-tap resets); straight lines and pen strokes can now be moved in move mode like text.

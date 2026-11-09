@@ -16,7 +16,9 @@ runs entirely offline in a browser; an optional Android WebView shell
 尺八の譜面、箏曲の譜面等の邦楽の縦譜（右から左へ、上から下へ読む縦書きの楽譜）
 用のPDF ビューアです。PDF の楽譜を開き、楽譜にコメントや線を引くことが出来ます。
 アプリ本体は単一の HTML ファイルで、ネットワークなしで動作します。
-LineageOS上でBluetooth フットペダルを使用するのを前提で作成しています。
+LineageOS上でBluetooth フットペダルを使用するのを前提で作成していますが、
+Androidであれば概ね動作すると思います。
+HTMLを開けばiOSでも動作するはずですが、未確認です。
 
 サンプルとしてPDFが入っています。
 

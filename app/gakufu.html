@@ -167,7 +167,22 @@
         display: flex; flex-direction: column; align-items: center; gap: 4px;
         border-radius: 16px; background: var(--rail); padding: 6px;
         box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+        transition: opacity 0.15s ease, visibility 0.15s ease;
       }
+      /* While dragging on the page (e.g. moving a comment in 動かす mode),
+         hide the rail so it never covers what is dragged to the right edge. */
+      .tool-rail.drag-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+      /* Once the user drags the rail by its grip, it is positioned freely
+         (inline left/top) instead of the default right-edge anchor. */
+      .tool-rail.free { right: auto; transform: none; }
+      .tool-rail.dragging { box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45); }
+      .rail-handle {
+        display: flex; width: 56px; align-items: center; justify-content: center;
+        border-radius: 8px; padding: 7px 4px 5px; color: rgba(240, 234, 217, 0.55);
+        cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none;
+      }
+      .rail-handle:active { cursor: grabbing; }
+      .rail-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
       .tool-btn {
         display: flex; width: 56px; flex-direction: column; align-items: center; gap: 2px;
         border-radius: 8px; padding: 8px 4px; font-size: 11px; line-height: 1.2; color: var(--rail-text);
@@ -291,7 +306,8 @@
             <li>「見る」モードで画面の中央あたりをタップすると、ボタン類を隠して楽譜だけを表示できます（もう一度タップで戻ります）。</li>
             <li>楽譜はドラッグでは動きません。拡大・縮小は2本指のピンチか、下のバーの ＋／－ で行います。</li>
             <li>右側の道具から「文字」を選んでページをタップすると、縦書きコメントを置けます。入力中は、文字が入る場所が点線の四角で楽譜の上に表示されます。</li>
-            <li>置いた文字の位置は、道具の「動かす」で四角をドラッグして、あとから好きな場所へ調整できます。</li>
+            <li>置いた文字や引いた線は、道具の「動かす」でドラッグして、あとから好きな場所へ調整できます（線は「直線」「ペン」のどちらも動かせます）。</li>
+            <li>右側の道具（エディットツール）自体も、上部の点々のつまみをドラッグすると、画面内の好きな場所へ動かせます（位置は次回も保持されます）。つまみをダブルタップすると、元の位置（右側の中央）に戻ります。</li>
             <li>「直線」は縦・横にそろえて引けます。「ペン」は自由な線です。</li>
             <li>LEKATOペダルは、矢印キーやPageUp / PageDownを送るモードでページ送りできます（向きは楽譜画面の「設定」で変更）。</li>
             <li>書き込みは元のPDFには直接反映されません（アプリ内で重ねて保存されます）。書き込み入りのPDFが必要なときは、楽譜を開いて上のバーの「PDF書き出し」から、書き込みを合成した新しいPDFを保存できます。</li>
@@ -326,6 +342,10 @@
           </div>
         </div>
         <nav class="tool-rail" aria-label="書き込みツール" id="tool-rail">
+          <div class="rail-handle" id="rail-handle" role="button" tabindex="0" aria-label="エディットツールを移動するつまみ（ドラッグで移動、ダブルタップで元の位置へ）">
+            <svg width="22" height="16" viewBox="0 0 22 16" aria-hidden="true" focusable="false"><g fill="currentColor"><circle cx="6" cy="3" r="1.9"/><circle cx="16" cy="3" r="1.9"/><circle cx="6" cy="8" r="1.9"/><circle cx="16" cy="8" r="1.9"/><circle cx="6" cy="13" r="1.9"/><circle cx="16" cy="13" r="1.9"/></g></svg>
+          </div>
+          <div class="rail-sep"></div>
           <button type="button" class="tool-btn" data-tool="view" aria-pressed="true"><span class="glyph" aria-hidden="true">◉</span>見る</button>
           <button type="button" class="tool-btn" data-tool="line" aria-pressed="false"><span class="glyph" aria-hidden="true">／</span>直線</button>
           <button type="button" class="tool-btn" data-tool="pen" aria-pressed="false"><span class="glyph" aria-hidden="true">✎</span>ペン</button>
@@ -347,7 +367,7 @@
         </div>
         <button type="button" class="seg-btn soft hidden" id="opt-snap" aria-pressed="true">縦横にそろえる ON</button>
         <p class="opt-hint hidden" id="opt-text-hint">ページをタップした場所に、縦書きで文字を置きます（入力中は、入る場所が点線の四角で表示されます）</p>
-        <p class="opt-hint hidden" id="opt-move-hint">文字の四角をドラッグすると、好きな位置へ動かせます</p>
+        <p class="opt-hint hidden" id="opt-move-hint">文字や線をドラッグすると、好きな位置へ動かせます（ドラッグ中は右側の道具が隠れます）</p>
       </div>
 
       <footer class="v-footer">
@@ -4680,6 +4700,23 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         var hPts = maxLen * item.size * 1.14;
         return { x0: item.x - wPts / pageW, y0: item.y, x1: item.x, y1: item.y + hPts / pageH };
       }
+      /* Normalized bounding box of any annotation item. Used to draw grab
+         frames in move mode and to keep a dragged item inside the page. */
+      function itemBounds(item, pageW, pageH) {
+        if (item.kind === "text") return textBox(item, pageW, pageH);
+        if (item.kind === "line") {
+          return {
+            x0: Math.min(item.x1, item.x2), y0: Math.min(item.y1, item.y2),
+            x1: Math.max(item.x1, item.x2), y1: Math.max(item.y1, item.y2),
+          };
+        }
+        var xs = item.points.map(function (pt) { return pt[0]; });
+        var ys = item.points.map(function (pt) { return pt[1]; });
+        return {
+          x0: Math.min.apply(null, xs), y0: Math.min.apply(null, ys),
+          x1: Math.max.apply(null, xs), y1: Math.max.apply(null, ys),
+        };
+      }
       function hitTest(items, p, pageW, pageH) {
         for (var i = items.length - 1; i >= 0; i--) {
           var item = items[i];
@@ -4728,7 +4765,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         userZoom: 1,
         pan: { x: 0, y: 0 },
         draft: null,
-        textDrag: null,
+        itemDrag: null,
         editor: null,
         settingsOpen: false,
         pedalReversed: false,
@@ -5132,6 +5169,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         var r = el.getBoundingClientRect();
         S.size = { w: r.width, h: r.height };
         layoutStage();
+        applyRailPos();
       }
 
       async function renderPageCanvas() {
@@ -5193,7 +5231,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
             if (i.kind !== "text") return;
             var b = textBox(i, pageW(), pageH());
             var f = document.createElement("div");
-            f.className = "text-frame" + (S.textDrag && S.textDrag.id === i.id ? " active" : "");
+            f.className = "text-frame" + (S.itemDrag && S.itemDrag.id === i.id ? " active" : "");
             f.style.left = b.x0 * pageW() + "px";
             f.style.top = b.y0 * pageH() + "px";
             f.style.width = (b.x1 - b.x0) * pageW() + "px";
@@ -5242,6 +5280,25 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
             svg.appendChild(pl);
           }
         });
+        // In move mode, outline every line/stroke with a grab frame too,
+        // matching the dashed frames drawn around comments above.
+        if (S.mode === "move") {
+          items.forEach(function (i) {
+            if (i.kind !== "line" && i.kind !== "stroke") return;
+            var bb = itemBounds(i, pageW(), pageH());
+            var active = S.itemDrag && S.itemDrag.id === i.id;
+            var rect = document.createElementNS(NS, "rect");
+            rect.setAttribute("x", Math.max(0, bb.x0 - 0.012) * pageW());
+            rect.setAttribute("y", Math.max(0, bb.y0 - 0.012) * pageH());
+            rect.setAttribute("width", (Math.min(1, bb.x1 + 0.012) - Math.max(0, bb.x0 - 0.012)) * pageW());
+            rect.setAttribute("height", (Math.min(1, bb.y1 + 0.012) - Math.max(0, bb.y0 - 0.012)) * pageH());
+            rect.setAttribute("fill", active ? "rgba(199, 62, 29, 0.10)" : "none");
+            rect.setAttribute("stroke", active ? "#c73e1d" : "rgba(26, 23, 20, 0.45)");
+            rect.setAttribute("stroke-width", active ? 2 : 1.5);
+            if (!active) rect.setAttribute("stroke-dasharray", "6 5");
+            svg.appendChild(rect);
+          });
+        }
         updateUndoBtn();
       }
 
@@ -5409,11 +5466,110 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
       function effWidth() { return pageW() * (WIDTH_LEVELS[S.widthLevel] || 0.008); }
       function defaultTextSize() { return Math.round(pageW() * (SIZE_LEVELS[1] || 0.046)); }
 
-      /* Abandon an in-progress text drag, restoring the pre-drag position. */
-      function cancelTextDrag() {
-        if (!S.textDrag) return;
-        S.itemsByPage[S.page] = S.textDrag.before;
-        S.textDrag = null;
+      /* Hide the tool rail while a drag is in progress, so it does not
+         cover the comment being moved toward the right edge of the page. */
+      function setRailDragHidden(hidden) {
+        $("tool-rail").classList.toggle("drag-hidden", !!hidden);
+      }
+
+      /* ---------------- movable edit tool (rail) ----------------
+         The rail normally sits centered on the right edge. Dragging the
+         grip at its top (or the arrow keys while the grip is focused)
+         moves it anywhere inside the stage area. The position is kept as
+         fractions of the stage size so it survives rotation/resizing,
+         and stored like the pedal setting. Double-tapping the grip
+         returns the rail to its default spot. */
+      var RAIL_POS_KEY = "score-viewer:rail-pos";
+      var railPos = null; // {fx, fy}: rail left/top as fractions of stage size
+      var railDrag = null;
+      try {
+        var savedRailPos = JSON.parse(localStorage.getItem(RAIL_POS_KEY) || "null");
+        if (savedRailPos && isFinite(savedRailPos.fx) && isFinite(savedRailPos.fy)) railPos = savedRailPos;
+      } catch (e) { /* ignore */ }
+
+      function railWrapEl() { return $("tool-rail").parentElement; }
+      function clampRailPos(left, top) {
+        var wrap = railWrapEl(), rail = $("tool-rail");
+        var maxL = Math.max(0, wrap.clientWidth - rail.offsetWidth);
+        var maxT = Math.max(0, wrap.clientHeight - rail.offsetHeight);
+        return {
+          left: Math.min(Math.max(0, left), maxL),
+          top: Math.min(Math.max(0, top), maxT),
+        };
+      }
+      function setRailPos(left, top, save) {
+        var wrap = railWrapEl();
+        var p = clampRailPos(left, top);
+        var rail = $("tool-rail");
+        rail.classList.add("free");
+        rail.style.left = p.left + "px";
+        rail.style.top = p.top + "px";
+        if (wrap.clientWidth && wrap.clientHeight) {
+          railPos = { fx: p.left / wrap.clientWidth, fy: p.top / wrap.clientHeight };
+          if (save) saveRailPos();
+        }
+      }
+      function saveRailPos() {
+        if (!railPos) return;
+        try { localStorage.setItem(RAIL_POS_KEY, JSON.stringify(railPos)); } catch (e) { /* ignore */ }
+      }
+      function applyRailPos() {
+        if (!railPos) return;
+        var wrap = railWrapEl();
+        if (!wrap.clientWidth || !wrap.clientHeight) return;
+        setRailPos(railPos.fx * wrap.clientWidth, railPos.fy * wrap.clientHeight, false);
+      }
+      function resetRailPos() {
+        railPos = null;
+        var rail = $("tool-rail");
+        rail.classList.remove("free");
+        rail.style.left = "";
+        rail.style.top = "";
+        try { localStorage.removeItem(RAIL_POS_KEY); } catch (e) { /* ignore */ }
+      }
+      function railOffsetInWrap() {
+        var wr = railWrapEl().getBoundingClientRect();
+        var rr = $("tool-rail").getBoundingClientRect();
+        return { left: rr.left - wr.left, top: rr.top - wr.top };
+      }
+      function onRailHandleDown(e) {
+        var rail = $("tool-rail"), rr = rail.getBoundingClientRect();
+        railDrag = { id: e.pointerId, dx: e.clientX - rr.left, dy: e.clientY - rr.top };
+        var cur = railOffsetInWrap();
+        setRailPos(cur.left, cur.top, false);
+        rail.classList.add("dragging");
+        e.currentTarget.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      }
+      function onRailHandleMove(e) {
+        if (!railDrag || e.pointerId !== railDrag.id) return;
+        var wr = railWrapEl().getBoundingClientRect();
+        setRailPos(e.clientX - wr.left - railDrag.dx, e.clientY - wr.top - railDrag.dy, false);
+      }
+      function onRailHandleUp(e) {
+        if (!railDrag || e.pointerId !== railDrag.id) return;
+        railDrag = null;
+        $("tool-rail").classList.remove("dragging");
+        saveRailPos();
+      }
+      function onRailHandleKey(e) {
+        var step = e.shiftKey ? 32 : 8;
+        var d = {
+          ArrowLeft: [-step, 0], ArrowRight: [step, 0],
+          ArrowUp: [0, -step], ArrowDown: [0, step],
+        }[e.key];
+        if (!d) return;
+        e.preventDefault();
+        var cur = railOffsetInWrap();
+        setRailPos(cur.left + d[0], cur.top + d[1], true);
+      }
+
+      /* Abandon an in-progress item drag, restoring the pre-drag position. */
+      function cancelItemDrag() {
+        if (!S.itemDrag) return;
+        S.itemsByPage[S.page] = S.itemDrag.before;
+        S.itemDrag = null;
+        setRailDragHidden(false);
         drawAnnotations();
       }
 
@@ -5441,16 +5597,19 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           pinch = { dist: pinchDistance(), zoom: S.userZoom };
           gesture = null;
           if (S.draft) { S.draft = null; drawAnnotations(); }
-          cancelTextDrag();
+          cancelItemDrag();
+          setRailDragHidden(false);
           return;
         }
         if (activePointers.size > 2) return;
         gesture = { startX: e.clientX, startY: e.clientY };
         if (S.mode === "line") {
           S.draft = { id: newId(), kind: "line", color: S.color, width: effWidth(), x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+          setRailDragHidden(true);
           drawAnnotations();
         } else if (S.mode === "pen") {
           S.draft = { id: newId(), kind: "stroke", color: S.color, width: effWidth(), points: [[p.x, p.y]] };
+          setRailDragHidden(true);
           drawAnnotations();
         } else if (S.mode === "text") {
           var hit = hitTest(currentItems(), p, pageW(), pageH());
@@ -5461,7 +5620,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           }
         } else if (S.mode === "move") {
           var hitM = hitTest(currentItems(), p, pageW(), pageH());
-          if (hitM && hitM.kind === "text") {
+          if (hitM) {
             // Drag on a cloned item list; `before` is kept so the drag can
             // be cancelled, or pushed as one undo step when it ends.
             var before = currentItems().map(function (i) { return Object.assign({}, i); });
@@ -5469,11 +5628,25 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
             S.itemsByPage[S.page] = clones;
             var target = null;
             clones.forEach(function (i) { if (i.id === hitM.id) target = i; });
-            S.textDrag = {
-              id: hitM.id, item: target,
-              dx: p.x - hitM.x, dy: p.y - hitM.y,
-              before: before, moved: false,
-            };
+            var drag = { id: hitM.id, item: target, before: before, moved: false };
+            if (hitM.kind === "text") {
+              drag.dx = p.x - hitM.x; drag.dy = p.y - hitM.y;
+            } else {
+              // Lines and pen strokes move as a whole: remember the grab
+              // point and the original geometry, then translate by the
+              // pointer delta (clamped to the item's bounding box).
+              var hb = itemBounds(hitM, pageW(), pageH());
+              drag.gx = p.x; drag.gy = p.y;
+              drag.minX = hb.x0; drag.maxX = hb.x1;
+              drag.minY = hb.y0; drag.maxY = hb.y1;
+              if (hitM.kind === "line") {
+                drag.orig = { x1: hitM.x1, y1: hitM.y1, x2: hitM.x2, y2: hitM.y2 };
+              } else {
+                drag.origPoints = hitM.points.map(function (pt) { return [pt[0], pt[1]]; });
+              }
+            }
+            S.itemDrag = drag;
+            setRailDragHidden(true);
             drawAnnotations();
           }
         } else if (S.mode === "erase") {
@@ -5497,20 +5670,43 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           }
           return;
         }
-        if (S.textDrag) {
-          var td = S.textDrag;
+        if (S.itemDrag) {
+          var td = S.itemDrag;
           var p2 = toNorm(e);
           if (p2 && td.item) {
-            var tb = textBox(td.item, pageW(), pageH());
-            var bw = tb.x1 - tb.x0;
-            var bh = tb.y1 - tb.y0;
-            // Keep the whole comment box inside the page while dragging.
-            var nx = Math.min(Math.max(p2.x - td.dx, bw), 1);
-            var ny = Math.min(Math.max(p2.y - td.dy, 0), Math.max(0, 1 - bh));
-            if (nx !== td.item.x || ny !== td.item.y) {
-              td.item.x = nx;
-              td.item.y = ny;
-              td.moved = true;
+            if (td.item.kind === "text") {
+              var tb = textBox(td.item, pageW(), pageH());
+              var bw = tb.x1 - tb.x0;
+              var bh = tb.y1 - tb.y0;
+              // Keep the whole comment box inside the page while dragging.
+              var nx = Math.min(Math.max(p2.x - td.dx, bw), 1);
+              var ny = Math.min(Math.max(p2.y - td.dy, 0), Math.max(0, 1 - bh));
+              if (nx !== td.item.x || ny !== td.item.y) {
+                td.item.x = nx;
+                td.item.y = ny;
+                td.moved = true;
+              }
+            } else {
+              // Translate the whole line/stroke by the pointer delta,
+              // clamped so its bounding box stays inside the page.
+              var ddx = Math.min(Math.max(p2.x - td.gx, -td.minX), 1 - td.maxX);
+              var ddy = Math.min(Math.max(p2.y - td.gy, -td.minY), 1 - td.maxY);
+              if (td.item.kind === "line") {
+                var o = td.orig;
+                if (o.x1 + ddx !== td.item.x1 || o.y1 + ddy !== td.item.y1 ||
+                    o.x2 + ddx !== td.item.x2 || o.y2 + ddy !== td.item.y2) {
+                  td.item.x1 = o.x1 + ddx; td.item.y1 = o.y1 + ddy;
+                  td.item.x2 = o.x2 + ddx; td.item.y2 = o.y2 + ddy;
+                  td.moved = true;
+                }
+              } else if (td.origPoints && td.origPoints.length) {
+                var fp = td.origPoints[0];
+                if (!td.item.points.length ||
+                    fp[0] + ddx !== td.item.points[0][0] || fp[1] + ddy !== td.item.points[0][1]) {
+                  td.item.points = td.origPoints.map(function (pt) { return [pt[0] + ddx, pt[1] + ddy]; });
+                  td.moved = true;
+                }
+              }
             }
             drawAnnotations();
           }
@@ -5537,15 +5733,16 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         }
       }
       function onPointerUp(e) {
+        setRailDragHidden(false);
         var wasPinch = !!pinch;
         activePointers.delete(e.pointerId);
         if (activePointers.size < 2) pinch = null;
         var g = gesture;
         gesture = null;
         if (wasPinch) return;
-        if (S.textDrag) {
-          var tdEnd = S.textDrag;
-          S.textDrag = null;
+        if (S.itemDrag) {
+          var tdEnd = S.itemDrag;
+          S.itemDrag = null;
           if (tdEnd.moved) {
             // One drag = one undo step, saved like any other edit.
             var stack = S.history.get(S.page) || [];
@@ -5680,7 +5877,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         updateZoomLabel();
       }
       function setMode(mode) {
-        cancelTextDrag();
+        cancelItemDrag();
         S.mode = mode;
         S.draft = null;
         drawAnnotations();
@@ -5964,6 +6161,13 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           b.addEventListener("click", function () { setMode(b.getAttribute("data-tool")); });
         });
         $("btn-undo").addEventListener("click", undo);
+        var railHandle = $("rail-handle");
+        railHandle.addEventListener("pointerdown", onRailHandleDown);
+        railHandle.addEventListener("pointermove", onRailHandleMove);
+        railHandle.addEventListener("pointerup", onRailHandleUp);
+        railHandle.addEventListener("pointercancel", onRailHandleUp);
+        railHandle.addEventListener("keydown", onRailHandleKey);
+        railHandle.addEventListener("dblclick", resetRailPos);
         Array.prototype.forEach.call($("opt-widths").querySelectorAll("button"), function (b) {
           b.addEventListener("click", function () { S.widthLevel = Number(b.getAttribute("data-width")); updateToolUI(); });
         });
@@ -6005,7 +6209,8 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           activePointers.delete(e.pointerId);
           if (activePointers.size < 2) pinch = null;
           gesture = null; S.draft = null;
-          cancelTextDrag();
+          cancelItemDrag();
+          setRailDragHidden(false);
           drawAnnotations();
         });
         pl.addEventListener("contextmenu", function (e) { e.preventDefault(); });

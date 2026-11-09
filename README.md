@@ -3,13 +3,13 @@
 ## English abstract
 
 JScoreFolio is an offline viewer for traditional Japanese vertical-notation sheet
-music (*tategaku* / 縦譜）. It opens PDF scores and lets you annotate directly
+music (*tatefu* / 縦譜）. It opens PDF scores and lets you annotate directly
 on the pages — vertical-text comments, snapped straight lines, and freehand
 pen — with automatic margin cropping and page turning via a Bluetooth foot
 pedal. The app is a single self-contained HTML file (`app/gakufu.html`) that
 runs entirely offline in a browser; an optional Android WebView shell
 (`android/`) packages it as an APK, and a ready-to-install build
-(`JScoreFolio-1.3.apk`) is included.
+(`JScoreFolio-*.*.apk`) is included.
 
 ## このアプリについて
 
@@ -21,7 +21,7 @@ Androidであれば概ね動作すると思います。
 HTMLを開けばiOSでも動作するはずですが、未確認です。
 
 サンプルとしてPDFが入っています。
-JScoreFolio-1.3.apkをダウンロードしてインストールしてください。
+JScoreFolio-*.*.apkをダウンロードしてインストールしてください。
 
 ## 機能
 

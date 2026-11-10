@@ -142,6 +142,23 @@
         box-shadow: 0 6px 36px rgba(0, 0, 0, 0.35); transform-origin: 0 0;
       }
       #stage canvas { display: block; width: 100%; height: 100%; }
+      /* ---------- half-page (boundary) view ----------
+         Shown instead of #stage while the half-page mode sits on a page
+         boundary: the second half of the previous page and the first
+         half of the next page side by side. Vertical scores read
+         right-to-left, so the previous page sits on the right and the
+         next page on the left, and reading flows across the seam. */
+      #stage-half {
+        position: absolute; left: 0; top: 0; background: #fff;
+        box-shadow: 0 6px 36px rgba(0, 0, 0, 0.35); transform-origin: 0 0;
+        display: flex;
+      }
+      .half-pane { position: relative; overflow: hidden; flex-grow: 1; flex-shrink: 1; flex-basis: 0; }
+      .half-pane canvas { display: block; width: 100%; height: 100%; }
+      .half-pane + .half-pane { border-left: 2px solid rgba(26, 23, 20, 0.55); }
+      #half-pointer-layer { position: absolute; inset: 0; z-index: 12; touch-action: none; }
+      /* Boundary view is display-only: the edit rail is visibly off-duty. */
+      #screen-viewer.boundary-active .tool-rail { opacity: 0.35; pointer-events: none; }
       .layer { position: absolute; inset: 0; }
       #text-layer { pointer-events: none; }
       #anno-svg { pointer-events: none; }
@@ -310,6 +327,7 @@
             <li>右側の道具（エディットツール）自体も、上部の点々のつまみをドラッグすると、画面内の好きな場所へ動かせます（位置は次回も保持されます）。つまみをダブルタップすると、元の位置（右側の中央）に戻ります。</li>
             <li>「直線」は縦・横にそろえて引けます。「ペン」は自由な線です。</li>
             <li>LEKATOペダルは、矢印キーやPageUp / PageDownを送るモードでページ送りできます（向きは楽譜画面の「設定」で変更）。</li>
+            <li>ページの境目で演奏が途切れるときは、下のバーの「半ページ」を ON にしてください。送りが半ページずつになり、ページ全体の表示と「前のページの後半＋次のページの前半」の境目表示が交互に出ます。境目表示の間は書き込みはできず、表示とページ送りだけになります。</li>
             <li>書き込みは元のPDFには直接反映されません（アプリ内で重ねて保存されます）。書き込み入りのPDFが必要なときは、楽譜を開いて上のバーの「PDF書き出し」から、書き込みを合成した新しいPDFを保存できます。</li>
             <li>ファイル選択画面でPDFがグレー表示になって選べないときは、選択画面で「ダウンロード」などの保存場所を開いてから選んでください（保存場所によって表示が変わります）。</li>
           </ul>
@@ -340,6 +358,11 @@
             <svg id="anno-svg" class="layer" aria-hidden="true" preserveAspectRatio="none"></svg>
             <div id="pointer-layer" class="layer" role="application" aria-label="楽譜ページ（書き込み面）"></div>
           </div>
+          <div id="stage-half" class="hidden" aria-label="境目表示（前のページの後半と次のページの前半）">
+            <div class="half-pane" id="half-pane-left"><canvas id="half-canvas-left"></canvas></div>
+            <div class="half-pane" id="half-pane-right"><canvas id="half-canvas-right"></canvas></div>
+          </div>
+          <div id="half-pointer-layer" class="hidden" role="application" aria-label="境目表示（表示とページ送り専用）"></div>
         </div>
         <nav class="tool-rail" aria-label="書き込みツール" id="tool-rail">
           <div class="rail-handle" id="rail-handle" role="button" tabindex="0" aria-label="エディットツールを移動するつまみ（ドラッグで移動、ダブルタップで元の位置へ）">
@@ -374,6 +397,7 @@
         <button type="button" id="btn-prev" class="btn-foot" aria-label="前のページ">◀ 前</button>
         <button type="button" id="btn-next" class="btn-foot" aria-label="次のページ">次 ▶</button>
         <div class="spacer"></div>
+        <button type="button" id="btn-half" class="btn-foot-sm" aria-pressed="false" aria-label="半ページ送りモード切り替え">半ページ OFF</button>
         <button type="button" id="btn-crop" class="btn-foot-sm on" aria-pressed="true" aria-label="余白カット切り替え">余白カット ON</button>
         <div class="seg-group" role="group" aria-label="拡大縮小">
           <button type="button" id="btn-zoom-out" class="btn-foot-sm" aria-label="縮小">－</button>
@@ -441,6 +465,10 @@
         <fieldset>
           <legend>操作ボタンの表示</legend>
           <p class="note">「見る」モードで画面の中央あたりをタップすると、上のバー・右側の道具・下のバーがまとめて隠れ、楽譜だけが表示されます。もう一度中央をタップすると戻ります。楽譜はドラッグでは動きません。拡大・縮小は2本指のピンチ、または下のバーの ＋／－ で行います。</p>
+        </fieldset>
+        <fieldset>
+          <legend>半ページ送り</legend>
+          <p class="note">下のバーの「半ページ」を ON にすると、ページ送りが半ページずつになります。ページ全体の表示の次に、境目表示（右に前のページの後半、左に次のページの前半。縦行の楽譜の読み順に合わせています）が出て、もう一度送ると次のページ全体が出ます。ペダルやスワイプでも同じように送れます。境目表示の間は書き込みはできません（書き込み自体は境目表示にも合成して表示されます）。全ページ表示に戻れば、そのページで書き込めます。</p>
         </fieldset>
         <fieldset>
           <legend>余白カット</legend>
@@ -4754,6 +4782,10 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         pageCount: 0,
         pageDims: null,
         currentPdfPage: null,
+        halfMode: false,
+        boundary: false,
+        boundaryNextPdfPage: null,
+        boundaryViews: null,
         itemsByPage: {},
         mode: "view",
         color: ANNOTATION_COLORS[0].hex,
@@ -4778,7 +4810,16 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
       };
       try {
         S.pedalReversed = localStorage.getItem("score-viewer:pedal-reversed") === "1";
+        S.halfMode = localStorage.getItem("score-viewer:half-mode") === "1";
       } catch (e) { /* storage unavailable */ }
+
+      /* Half-page mode: page turns alternate between a full page and a
+         boundary view (second half of one page + first half of the next).
+         S.boundary marks the boundary view; S.page is then the earlier
+         (previous) of the two pages shown. */
+      function isBoundary() {
+        return !!(S.halfMode && S.boundary && S.pdfDoc && S.page >= 1 && S.page < S.pageCount);
+      }
 
       function currentItems() { return S.itemsByPage[S.page] || []; }
       function pageW() { return S.pageDims ? S.pageDims.w : 0; }
@@ -5042,6 +5083,9 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         S.pdfDoc = null;
         S.pageDims = null;
         S.currentPdfPage = null;
+        S.boundary = false;
+        S.boundaryNextPdfPage = null;
+        S.boundaryViews = null;
         S.itemsByPage = {};
         S.cropCache = new Map();
         S.cropBox = null;
@@ -5096,14 +5140,61 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           $("stage-msg-text").textContent = msg;
           el.classList.remove("hidden");
           $("stage").classList.add("hidden");
+          $("stage-half").classList.add("hidden");
         } else {
           el.classList.add("hidden");
-          $("stage").classList.remove("hidden");
+          $("stage").classList.toggle("hidden", isBoundary());
+          $("stage-half").classList.toggle("hidden", !isBoundary());
         }
+        syncBoundaryUI();
+      }
+
+      /* Reflect the boundary state in the chrome: overlay for taps and
+         swipes on, edit rail off-duty (CSS), options hidden. */
+      function syncBoundaryUI() {
+        var b = isBoundary();
+        $("screen-viewer").classList.toggle("boundary-active", b);
+        $("half-pointer-layer").classList.toggle("hidden", !b);
+        if (b) $("tool-options").classList.add("hidden");
+      }
+
+      /* The view box (after margin cropping) a page would get on its own. */
+      function viewForPage(pageNum) {
+        if (!S.cropOn) return FULL_BOX;
+        var raw = S.cropCache.get(pageNum);
+        return raw ? padInkBox(raw, CROP_PAD) : FULL_BOX;
+      }
+
+      async function loadBoundary() {
+        var doc = S.pdfDoc;
+        var prevNum = S.page;
+        var nextNum = S.page + 1;
+        var pPrev = await doc.getPage(prevNum);
+        if (S.pdfDoc !== doc) return;
+        var pNext = await doc.getPage(nextNum);
+        if (S.pdfDoc !== doc) return;
+        S.currentPdfPage = pPrev;
+        S.boundaryNextPdfPage = pNext;
+        var vp = pPrev.getViewport({ scale: 1 });
+        var changed = !S.pageDims || S.pageDims.w !== vp.width || S.pageDims.h !== vp.height;
+        S.pageDims = { w: vp.width, h: vp.height };
+        if (changed) buildStage();
+        showStageMsg(null);
+        S.boundaryViews = null;
+        S.cropBox = viewForPage(prevNum) === FULL_BOX ? null : viewForPage(prevNum);
+        S.lastZoomBucket = 0; // force re-render
+        layoutStage();
+        renderPageCanvas();
+        updateHeader();
+        updateFooter();
+        syncBoundaryUI();
       }
 
       async function loadCurrentPage() {
         if (!S.pdfDoc) return;
+        if (isBoundary()) { await loadBoundary(); return; }
+        S.boundaryNextPdfPage = null;
+        S.boundaryViews = null;
         var doc = S.pdfDoc;
         var p = await doc.getPage(S.page);
         if (S.pdfDoc !== doc) return;
@@ -5114,6 +5205,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         if (changed) buildStage();
         var raw = S.cropCache.get(S.page);
         S.cropBox = raw ? padInkBox(raw, CROP_PAD) : null;
+        if (!changed) showStageMsg(null);
         S.lastZoomBucket = 0; // force re-render
         layoutStage();
         renderPageCanvas();
@@ -5146,7 +5238,43 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
       }
       function zoom() { return fitZoom() * S.userZoom; }
 
+      /* Combined size (in points) of the two half views, and its fit zoom. */
+      function halfCombined() {
+        var pv = S.boundaryViews ? S.boundaryViews.prev : viewForPage(S.page);
+        var nv = S.boundaryViews ? S.boundaryViews.next : viewForPage(S.page + 1);
+        var pw = pageW(), ph = pageH();
+        var prevHalfW = ((pv.x1 - pv.x0) * pw) / 2;
+        var nextHalfW = ((nv.x1 - nv.x0) * pw) / 2;
+        return {
+          prev: pv, next: nv,
+          prevHalfW: prevHalfW, nextHalfW: nextHalfW,
+          w: prevHalfW + nextHalfW,
+          h: Math.max((pv.y1 - pv.y0) * ph, (nv.y1 - nv.y0) * ph),
+        };
+      }
+      function layoutHalf() {
+        if (!S.pageDims || !S.size.w) return;
+        var c = halfCombined();
+        if (!c.w || !c.h) return;
+        var el = $("stage-half");
+        el.style.width = c.w + "px";
+        el.style.height = c.h + "px";
+        $("half-pane-left").style.flexGrow = String(Math.max(1, c.nextHalfW));
+        $("half-pane-right").style.flexGrow = String(Math.max(1, c.prevHalfW));
+        var z = Math.min(S.size.w / c.w, S.size.h / c.h) * S.userZoom;
+        el.style.transform =
+          "translate(" + (S.size.w / 2 + S.pan.x) + "px, " + (S.size.h / 2 + S.pan.y) + "px) " +
+          "scale(" + z + ") " +
+          "translate(" + (-c.w / 2) + "px, " + (-c.h / 2) + "px)";
+        var bucket = Math.round(z * 2) / 2;
+        if (bucket !== S.lastZoomBucket) {
+          S.lastZoomBucket = bucket;
+          renderPageCanvas();
+        }
+      }
+
       function layoutStage() {
+        if (isBoundary()) { layoutHalf(); return; }
         if (!S.pageDims || !S.size.w) return;
         var view = currentView();
         var viewCx = (view.x0 + view.x1) / 2;
@@ -5172,7 +5300,90 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         applyRailPos();
       }
 
+      var boundaryRenderSeq = 0;
+
+      /* Render both boundary pages off-screen, detect/cache their ink
+         boxes, then cut the needed half out of each into its pane canvas
+         and composite that page's annotations (visible, not editable). */
+      async function renderBoundaryCanvas() {
+        var prevPage = S.currentPdfPage;
+        var nextPage = S.boundaryNextPdfPage;
+        if (!prevPage || !nextPage || !S.pageDims) return;
+        var seq = ++boundaryRenderSeq;
+        var prevNum = S.page;
+        var nextNum = S.page + 1;
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var rs = Math.max(0.5, S.lastZoomBucket * dpr);
+        rs = Math.min(rs, 4200 / pageW(), 4200 / pageH(), 4);
+        async function renderFull(pdfPage) {
+          var vp = pdfPage.getViewport({ scale: rs });
+          var c = document.createElement("canvas");
+          c.width = Math.round(vp.width);
+          c.height = Math.round(vp.height);
+          var ctx = c.getContext("2d");
+          if (!ctx) return null;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, c.width, c.height);
+          await pdfPage.render({ canvasContext: ctx, viewport: vp }).promise;
+          return { canvas: c, vp: vp };
+        }
+        var rPrev, rNext;
+        try {
+          rPrev = await renderFull(prevPage);
+          rNext = await renderFull(nextPage);
+        } catch (e) {
+          return; // superseded or failed render
+        }
+        if (!rPrev || !rNext) return;
+        if (seq !== boundaryRenderSeq || !isBoundary() || S.page !== prevNum) return;
+        [prevNum, nextNum].forEach(function (num, i) {
+          if (!S.cropCache.has(num)) {
+            S.cropCache.set(num, detectInkBox(i === 0 ? rPrev.canvas : rNext.canvas));
+          }
+        });
+        S.boundaryViews = { prev: viewForPage(prevNum), next: viewForPage(nextNum) };
+        function fillPane(canvasEl, rendered, region, items, dims) {
+          var src = rendered.canvas;
+          var sx = region.x0 * src.width;
+          var sy = region.y0 * src.height;
+          var sw = Math.max(1, (region.x1 - region.x0) * src.width);
+          var sh = Math.max(1, (region.y1 - region.y0) * src.height);
+          canvasEl.width = Math.round(sw);
+          canvasEl.height = Math.round(sh);
+          var ctx = canvasEl.getContext("2d");
+          if (!ctx) return;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+          ctx.drawImage(src, sx, sy, sw, sh, 0, 0, canvasEl.width, canvasEl.height);
+          if (items && items.length) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, canvasEl.width, canvasEl.height);
+            ctx.clip();
+            ctx.translate(-sx, -sy);
+            drawAnnotationsOnCanvas(ctx, items, dims.w, dims.h, rs);
+            ctx.restore();
+          }
+        }
+        var pv = S.boundaryViews.prev;
+        var nv = S.boundaryViews.next;
+        var midP = (pv.x0 + pv.x1) / 2;
+        var midN = (nv.x0 + nv.x1) / 2;
+        var prevDims = { w: rPrev.vp.width / rs, h: rPrev.vp.height / rs };
+        var nextDims = { w: rNext.vp.width / rs, h: rNext.vp.height / rs };
+        // Right pane: previous page, second half (its left half in x).
+        fillPane($("half-canvas-right"), rPrev,
+          { x0: pv.x0, y0: pv.y0, x1: midP, y1: pv.y1 },
+          S.itemsByPage[prevNum] || [], prevDims);
+        // Left pane: next page, first half (its right half in x).
+        fillPane($("half-canvas-left"), rNext,
+          { x0: midN, y0: nv.y0, x1: nv.x1, y1: nv.y1 },
+          S.itemsByPage[nextNum] || [], nextDims);
+        layoutStage();
+      }
+
       async function renderPageCanvas() {
+        if (isBoundary()) { await renderBoundaryCanvas(); return; }
         var canvas = $("pdf-canvas");
         var pdfPage = S.currentPdfPage;
         if (!canvas || !pdfPage || !S.pageDims) return;
@@ -5343,12 +5554,23 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
       /* ---------------- page turning + pedal ---------------- */
       function goNext() {
         if (S.pageCount && S.page >= S.pageCount) return;
-        S.page += 1;
+        if (S.halfMode && !S.boundary) {
+          S.boundary = true; // full page -> boundary with the next page
+        } else {
+          if (S.halfMode) S.boundary = false; // boundary -> next full page
+          S.page += 1;
+        }
         onPageChanged();
       }
       function goPrev() {
+        if (S.halfMode && S.boundary) {
+          S.boundary = false; // boundary -> its earlier page, full
+          onPageChanged();
+          return;
+        }
         if (S.page <= 1) return;
         S.page -= 1;
+        if (S.halfMode) S.boundary = true; // full page -> boundary before it
         onPageChanged();
       }
       function onPageChanged() {
@@ -5356,7 +5578,26 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         S.userZoom = 1;
         S.draft = null;
         S.confirmClear = false;
+        if (isBoundary()) {
+          // Boundary view is display-only: leave any edit mode behind.
+          if (S.editor) closeEditor();
+          cancelItemDrag();
+          if (S.mode !== "view") { S.mode = "view"; updateToolUI(); }
+        }
+        syncBoundaryUI();
         loadCurrentPage();
+      }
+
+      function setHalfMode(on) {
+        S.halfMode = !!on;
+        if (!S.halfMode) S.boundary = false;
+        try { localStorage.setItem("score-viewer:half-mode", S.halfMode ? "1" : "0"); } catch (e) { /* ignore */ }
+        S.pan = { x: 0, y: 0 };
+        S.userZoom = 1;
+        S.draft = null;
+        updateFooter();
+        syncBoundaryUI();
+        if (S.screen === "viewer" && S.pdfDoc) loadCurrentPage();
       }
 
       function flashKey(key) {
@@ -5783,6 +6024,64 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         }
       }
 
+      /* ---------------- boundary view pointer (display + paging only) -- */
+      var halfPointers = new Map();
+      var halfPinch = null;
+      var halfGesture = null;
+      function halfPinchDistance() {
+        var pts = Array.from(halfPointers.values());
+        if (pts.length < 2) return 0;
+        return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      }
+      function onHalfPointerDown(e) {
+        if (!isBoundary()) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        halfPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (halfPointers.size === 2) {
+          halfPinch = { dist: halfPinchDistance(), zoom: S.userZoom };
+          halfGesture = null;
+          return;
+        }
+        if (halfPointers.size > 2) return;
+        halfGesture = { startX: e.clientX, startY: e.clientY };
+      }
+      function onHalfPointerMove(e) {
+        if (halfPointers.has(e.pointerId)) {
+          halfPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        }
+        if (halfPinch) {
+          var d = halfPinchDistance();
+          if (d > 0 && halfPinch.dist > 0) {
+            S.userZoom = Math.min(3, Math.max(1, halfPinch.zoom * (d / halfPinch.dist)));
+            layoutStage();
+            updateZoomLabel();
+          }
+        }
+      }
+      function onHalfPointerUp(e) {
+        var wasPinch = !!halfPinch;
+        halfPointers.delete(e.pointerId);
+        if (halfPointers.size < 2) halfPinch = null;
+        var g = halfGesture;
+        halfGesture = null;
+        if (wasPinch || !g) return;
+        var dx = e.clientX - g.startX;
+        var dy = e.clientY - g.startY;
+        if (Math.abs(dx) <= 12 && Math.abs(dy) <= 12) {
+          if (isCenterTap(e.clientX, e.clientY)) {
+            setChromeHidden(!chromeHidden);
+            if (!chromeHidden) showTapHint(2600);
+          }
+        } else if (S.userZoom <= 1.02 && Math.abs(dx) > 72 && Math.abs(dy) < 56) {
+          if (dx < 0) goNext(); else goPrev();
+        }
+      }
+      function onHalfPointerCancel(e) {
+        halfPointers.delete(e.pointerId);
+        if (halfPointers.size < 2) halfPinch = null;
+        halfGesture = null;
+      }
+
       /* ---------------- text editor ---------------- */
       function buildColorButtons(container, getColor, setColor) {
         container.innerHTML = "";
@@ -5855,7 +6154,13 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
 
       /* ---------------- header / footer / tools UI ---------------- */
       function updateHeader() {
-        $("page-info").textContent = S.pageCount > 0 ? S.page + " / " + S.pageCount + " ページ" : "読み込み中";
+        if (S.pageCount <= 0) {
+          $("page-info").textContent = "読み込み中";
+        } else if (isBoundary()) {
+          $("page-info").textContent = S.page + "–" + (S.page + 1) + " / " + S.pageCount + " ページ（境目）";
+        } else {
+          $("page-info").textContent = S.page + " / " + S.pageCount + " ページ" + (S.halfMode ? "（半ページ送り）" : "");
+        }
         setSaveState(S.saveState);
       }
       function updateZoomLabel() {
@@ -5864,19 +6169,25 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         $("btn-zoom-in").disabled = S.userZoom >= 3;
       }
       function updateFooter() {
-        $("btn-prev").disabled = S.page <= 1;
+        $("btn-prev").disabled = isBoundary() ? false : S.page <= 1;
         $("btn-next").disabled = S.pageCount === 0 || S.page >= S.pageCount;
+        var halfBtn = $("btn-half");
+        halfBtn.textContent = "半ページ " + (S.halfMode ? "ON" : "OFF");
+        halfBtn.setAttribute("aria-pressed", S.halfMode ? "true" : "false");
+        halfBtn.classList.toggle("on", S.halfMode);
         var cropBtn = $("btn-crop");
         cropBtn.textContent = "余白カット " + (S.cropOn ? "ON" : "OFF");
         cropBtn.setAttribute("aria-pressed", S.cropOn ? "true" : "false");
         cropBtn.classList.toggle("on", S.cropOn);
         var clearBtn = $("btn-clear");
+        clearBtn.disabled = isBoundary();
         clearBtn.textContent = S.confirmClear ? "本当に全消し？" : "全消し";
         clearBtn.classList.toggle("danger", S.confirmClear);
         clearBtn.classList.toggle("plain-danger", !S.confirmClear);
         updateZoomLabel();
       }
       function setMode(mode) {
+        if (isBoundary() && mode !== "view") return; // display-only view
         cancelItemDrag();
         S.mode = mode;
         S.draft = null;
@@ -5887,7 +6198,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         Array.prototype.forEach.call($("tool-rail").querySelectorAll("[data-tool]"), function (b) {
           b.setAttribute("aria-pressed", b.getAttribute("data-tool") === S.mode ? "true" : "false");
         });
-        var showOpts = S.mode === "line" || S.mode === "pen" || S.mode === "text" || S.mode === "move";
+        var showOpts = !isBoundary() && (S.mode === "line" || S.mode === "pen" || S.mode === "text" || S.mode === "move");
         $("tool-options").classList.toggle("hidden", !showOpts);
         $("opt-widths").classList.toggle("hidden", S.mode === "text" || S.mode === "move");
         $("opt-snap").classList.toggle("hidden", S.mode !== "line");
@@ -6174,12 +6485,14 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         $("opt-snap").addEventListener("click", function () { S.snap = !S.snap; updateToolUI(); });
         $("btn-prev").addEventListener("click", goPrev);
         $("btn-next").addEventListener("click", goNext);
+        $("btn-half").addEventListener("click", function () { setHalfMode(!S.halfMode); });
         $("btn-crop").addEventListener("click", function () {
           S.cropOn = !S.cropOn;
           S.pan = { x: 0, y: 0 };
           S.userZoom = 1;
           S.lastZoomBucket = 0;
-          layoutStage();
+          if (isBoundary()) { S.boundaryViews = null; loadCurrentPage(); }
+          else layoutStage();
           updateFooter();
         });
         $("btn-zoom-out").addEventListener("click", function () {
@@ -6214,6 +6527,12 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           drawAnnotations();
         });
         pl.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+        var hpl = $("half-pointer-layer");
+        hpl.addEventListener("pointerdown", onHalfPointerDown);
+        hpl.addEventListener("pointermove", onHalfPointerMove);
+        hpl.addEventListener("pointerup", onHalfPointerUp);
+        hpl.addEventListener("pointercancel", onHalfPointerCancel);
+        hpl.addEventListener("contextmenu", function (e) { e.preventDefault(); });
         $("editor-text").addEventListener("input", function (e) {
           if (S.editor) { S.editor.text = e.target.value; syncEditorPreview(); }
         });

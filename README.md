@@ -18,7 +18,7 @@ runs entirely offline in a browser; an optional Android WebView shell
 アプリ本体は単一の HTML ファイルで、ネットワークなしで動作します。
 LineageOS上でBluetooth フットペダルを使用するのを前提で作成していますが、
 Androidであれば概ね動作すると思います。
-HTMLを開けばiOSでも動作するはずですが、未確認です。
+HTMLを開けばiOSでも動作するはずですが、未確認です。→ダメでした。
 
 サンプルとしてPDFが入っています。
 JScoreFolio-x.x.apkをダウンロードしてインストールしてください。

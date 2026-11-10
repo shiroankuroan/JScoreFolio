@@ -219,5 +219,5 @@ JScoreFolio/
     build-apk.sh       # 手組みビルドスクリプト
     res/               # アイコンと色定義
     src/jp/ker/jscorefolio/MainActivity.java
-  JScoreFolio-1.3.apk  # ビルド済み APK（インストール用サンプル）
+  JScoreFolio-x.x.apk  # ビルド済み APK（インストール用サンプル）
 ```

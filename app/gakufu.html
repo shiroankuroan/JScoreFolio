@@ -135,6 +135,7 @@
         flex-shrink: 0; border-radius: 999px; background: var(--accent); color: #fff;
         padding: 4px 12px; font-size: 14px; font-weight: 500;
       }
+      #preload-status { font-weight: 500; }
       .stage-wrap { position: relative; flex: 1; min-height: 0; }
       #stage-container { position: absolute; inset: 0; overflow: hidden; background: var(--stage); }
       #stage {
@@ -320,6 +321,7 @@
           <h2>使い方</h2>
           <ul>
             <li>開いた楽譜は、余白を自動で除いて拡大表示します（下のバーの「余白カット」で切り替え）。</li>
+            <li>楽譜を開くと、全ページを最初に読み込んで描画の控えを作ります（上のバーに「全ページ先読み中 ○ / ○」と進み具合が出ます）。先読みが終わったページへのページ送りは、描画し直さず即座に表示されます。先読みの途中でもページ送りはできます。</li>
             <li>「見る」モードで画面の中央あたりをタップすると、ボタン類を隠して楽譜だけを表示できます（もう一度タップで戻ります）。</li>
             <li>楽譜はドラッグでは動きません。拡大・縮小は2本指のピンチか、下のバーの ＋／－ で行います。</li>
             <li>右側の道具から「文字」を選んでページをタップすると、縦書きコメントを置けます。入力中は、文字が入る場所が点線の四角で楽譜の上に表示されます。</li>
@@ -342,7 +344,7 @@
         <button type="button" id="btn-back" class="btn-head">‹ ライブラリ</button>
         <div class="v-title">
           <p class="name font-min" id="doc-name">…</p>
-          <p class="sub"><span id="page-info">読み込み中</span> ・ <span id="save-state">保存済み</span></p>
+          <p class="sub"><span id="page-info">読み込み中</span> ・ <span id="save-state">保存済み</span><span id="preload-status" class="hidden" aria-live="polite"></span></p>
         </div>
         <span id="key-badge" class="key-badge hidden" aria-live="polite"></span>
         <button type="button" id="btn-export" class="btn-head" aria-label="書き込み入りのPDFを書き出す">PDF書き出し</button>
@@ -469,6 +471,10 @@
         <fieldset>
           <legend>半ページ送り</legend>
           <p class="note">下のバーの「半ページ」を ON にすると、ページ送りが半ページずつになります。ページ全体の表示の次に、境目表示（右に前のページの後半、左に次のページの前半。縦行の楽譜の読み順に合わせています）が出て、もう一度送ると次のページ全体が出ます。ペダルやスワイプでも同じように送れます。境目表示の間は書き込みはできません（書き込み自体は境目表示にも合成して表示されます）。全ページ表示に戻れば、そのページで書き込めます。</p>
+        </fieldset>
+        <fieldset>
+          <legend>ページの先読み</legend>
+          <p class="note">楽譜を開くと、表示中のページを出したあと、残りの全ページも順に描画して控えを作ります。上のバーに進み具合（全ページ先読み中 ○ / ○）が出て、完了すると「全○ページ読み込み済み」と表示されます。先読み済みのページへのページ送りは、描画し直さず即座に表示されるため、開いてすぐのページ送りでも待たされません。拡大してより細かく見るときは、そのページだけ高精細に描画し直し、控えも更新します。</p>
         </fieldset>
         <fieldset>
           <legend>余白カット</legend>
@@ -4794,6 +4800,8 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         cropOn: true,
         cropBox: null,
         cropCache: new Map(),
+        pageCache: new Map(),
+        pageObjects: new Map(),
         userZoom: 1,
         pan: { x: 0, y: 0 },
         draft: null,
@@ -5088,6 +5096,10 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         S.boundaryViews = null;
         S.itemsByPage = {};
         S.cropCache = new Map();
+        S.pageCache = new Map();
+        S.pageObjects = new Map();
+        preloadSeq++;
+        updatePreloadStatus(0, 0, false);
         S.cropBox = null;
         S.cropOn = true;
         S.userZoom = 1;
@@ -5117,6 +5129,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           S.pdfDoc = doc;
           S.pageCount = doc.numPages;
           await loadCurrentPage();
+          startPreload();
         } catch (e) {
           showStageMsg("PDFを読み込めませんでした");
         }
@@ -5125,6 +5138,10 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
 
       function closeViewer() {
         if (renderTask) { try { renderTask.cancel(); } catch (e) {} renderTask = null; }
+        preloadSeq++;
+        updatePreloadStatus(0, 0, false);
+        S.pageCache = new Map();
+        S.pageObjects = new Map();
         if (S.pdfDoc) { var d = S.pdfDoc; S.pdfDoc = null; d.destroy().catch(function () {}); }
         S.docId = null;
         S.currentPdfPage = null;
@@ -5158,6 +5175,154 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         if (b) $("tool-options").classList.add("hidden");
       }
 
+      /* ---------------- full preload (fast page turns) ----------------
+         Right after a score opens, every page is rendered once into an
+         off-screen canvas cache (ink boxes included), so later page
+         turns only copy the cached bitmap instead of asking pdf.js to
+         re-render the page on demand. The first page is shown as soon
+         as it is ready; the remaining pages preload in the background
+         with a progress note in the header, and a page turned to before
+         its turn in the queue still renders on demand and fills the
+         same cache. Closing the score releases the whole cache. */
+      var preloadSeq = 0;
+      var PRELOAD_MAX_SIDE = 2600;
+
+      function getPdfPage(pageNum) {
+        var hit = S.pageObjects.get(pageNum);
+        if (hit) return Promise.resolve(hit);
+        return S.pdfDoc.getPage(pageNum).then(function (p) {
+          S.pageObjects.set(pageNum, p);
+          return p;
+        });
+      }
+
+      /* Render scale for a zoom bucket, capped like the interactive
+         renderer (plus a tighter max side for preload entries). */
+      function renderScaleFor(bucket, w, h, maxSide) {
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var rs = Math.max(0.5, bucket * dpr);
+        var cap = maxSide || 4200;
+        return Math.min(rs, cap / w, cap / h, 4);
+      }
+
+      /* The zoom bucket a page will be displayed at (fit to the stage;
+         page turns reset the user zoom to 1), mirroring layoutStage(). */
+      function fitBucketFor(pageNum, w, h) {
+        if (!S.size.w || !S.size.h || !w || !h) return 1;
+        var view = viewForPage(pageNum);
+        var fit = Math.min(
+          S.size.w / ((view.x1 - view.x0) * w),
+          S.size.h / ((view.y1 - view.y0) * h)
+        );
+        return Math.round(fit * 2) / 2;
+      }
+
+      /* Keep a private copy of a rendered page canvas in the cache.
+         A lower-resolution copy never replaces a sharper one. */
+      function storePageCache(pageNum, srcCanvas, bucket, rs) {
+        var prev = S.pageCache.get(pageNum);
+        if (prev && prev.bucket > bucket) return prev;
+        var c = document.createElement("canvas");
+        c.width = srcCanvas.width;
+        c.height = srcCanvas.height;
+        var ctx = c.getContext("2d");
+        if (!ctx) return prev || null;
+        ctx.drawImage(srcCanvas, 0, 0);
+        var entry = { canvas: c, bucket: bucket, rs: rs };
+        S.pageCache.set(pageNum, entry);
+        return entry;
+      }
+
+      async function renderPageToCache(pageNum, bucket, maxSide) {
+        var pdfPage = await getPdfPage(pageNum);
+        var base = pdfPage.getViewport({ scale: 1 });
+        var rs = renderScaleFor(bucket, base.width, base.height, maxSide);
+        var vp = pdfPage.getViewport({ scale: rs });
+        var c = document.createElement("canvas");
+        c.width = Math.round(vp.width);
+        c.height = Math.round(vp.height);
+        var ctx = c.getContext("2d");
+        if (!ctx) return null;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, c.width, c.height);
+        await pdfPage.render({ canvasContext: ctx, viewport: vp }).promise;
+        if (!S.cropCache.has(pageNum)) {
+          S.cropCache.set(pageNum, detectInkBox(c));
+        }
+        var prev = S.pageCache.get(pageNum);
+        if (prev && prev.bucket > bucket) return prev;
+        var entry = { canvas: c, bucket: bucket, rs: rs };
+        S.pageCache.set(pageNum, entry);
+        return entry;
+      }
+
+      function updatePreloadStatus(done, total, finished) {
+        var el = $("preload-status");
+        if (!el) return;
+        if (!total) { el.classList.add("hidden"); el.textContent = ""; return; }
+        el.classList.remove("hidden");
+        el.textContent = finished
+          ? " ・ 全" + total + "ページ読み込み済み（ページ送りは即時表示）"
+          : " ・ 全ページ先読み中 " + done + " / " + total;
+        if (finished) {
+          setTimeout(function () {
+            if (el.textContent.indexOf("読み込み済み") >= 0) el.classList.add("hidden");
+          }, 6000);
+        }
+      }
+
+      async function preloadAllPages(seq) {
+        var doc = S.pdfDoc;
+        if (!doc) return;
+        var total = doc.numPages;
+        updatePreloadStatus(0, total, false);
+        for (var n = 1; n <= total; n++) {
+          if (seq !== preloadSeq || S.pdfDoc !== doc) return;
+          try {
+            // Pages on screen right now are left to the viewer's own
+            // render (which fills the same cache) — never render the
+            // same page in two places at once.
+            var onScreen = n === S.page || (isBoundary() && n === S.page + 1);
+            if (!S.pageCache.has(n) && !onScreen) {
+              var pdfPage = await getPdfPage(n);
+              if (seq !== preloadSeq || S.pdfDoc !== doc) return;
+              var base = pdfPage.getViewport({ scale: 1 });
+              if (!S.cropCache.has(n)) {
+                // Cheap probe render first, so the ink box (and with it
+                // the real fit zoom) is known before the full render.
+                var probeScale = Math.min(1, 480 / base.width);
+                var pvp = pdfPage.getViewport({ scale: probeScale });
+                var pc = document.createElement("canvas");
+                pc.width = Math.round(pvp.width);
+                pc.height = Math.round(pvp.height);
+                var pctx = pc.getContext("2d");
+                if (pctx) {
+                  pctx.fillStyle = "#ffffff";
+                  pctx.fillRect(0, 0, pc.width, pc.height);
+                  await pdfPage.render({ canvasContext: pctx, viewport: pvp }).promise;
+                  if (seq !== preloadSeq || S.pdfDoc !== doc) return;
+                  S.cropCache.set(n, detectInkBox(pc));
+                }
+              }
+              var bucket = fitBucketFor(n, base.width, base.height);
+              await renderPageToCache(n, bucket, PRELOAD_MAX_SIDE);
+            }
+          } catch (e) { /* a page that fails here still renders on demand */ }
+          if (seq !== preloadSeq || S.pdfDoc !== doc) return;
+          updatePreloadStatus(n, total, false);
+          // Yield so page turns and drawing stay responsive between pages.
+          await new Promise(function (r) { setTimeout(r, 0); });
+        }
+        if (seq === preloadSeq && S.pdfDoc === doc) {
+          updatePreloadStatus(total, total, true);
+        }
+      }
+
+      function startPreload() {
+        var seq = ++preloadSeq;
+        preloadAllPages(seq);
+      }
+
       /* The view box (after margin cropping) a page would get on its own. */
       function viewForPage(pageNum) {
         if (!S.cropOn) return FULL_BOX;
@@ -5169,9 +5334,9 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         var doc = S.pdfDoc;
         var prevNum = S.page;
         var nextNum = S.page + 1;
-        var pPrev = await doc.getPage(prevNum);
+        var pPrev = await getPdfPage(prevNum);
         if (S.pdfDoc !== doc) return;
-        var pNext = await doc.getPage(nextNum);
+        var pNext = await getPdfPage(nextNum);
         if (S.pdfDoc !== doc) return;
         S.currentPdfPage = pPrev;
         S.boundaryNextPdfPage = pNext;
@@ -5196,7 +5361,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         S.boundaryNextPdfPage = null;
         S.boundaryViews = null;
         var doc = S.pdfDoc;
-        var p = await doc.getPage(S.page);
+        var p = await getPdfPage(S.page);
         if (S.pdfDoc !== doc) return;
         S.currentPdfPage = p;
         var vp = p.getViewport({ scale: 1 });
@@ -5315,7 +5480,16 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         var dpr = Math.min(window.devicePixelRatio || 1, 2);
         var rs = Math.max(0.5, S.lastZoomBucket * dpr);
         rs = Math.min(rs, 4200 / pageW(), 4200 / pageH(), 4);
-        async function renderFull(pdfPage) {
+        async function renderFull(pdfPage, pageNum) {
+          var cached = S.pageCache.get(pageNum);
+          if (cached) {
+            // Preloaded pages are cut straight out of the cache.
+            return {
+              canvas: cached.canvas,
+              vp: { width: cached.canvas.width, height: cached.canvas.height },
+              rs: cached.rs || 1,
+            };
+          }
           var vp = pdfPage.getViewport({ scale: rs });
           var c = document.createElement("canvas");
           c.width = Math.round(vp.width);
@@ -5325,12 +5499,13 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, c.width, c.height);
           await pdfPage.render({ canvasContext: ctx, viewport: vp }).promise;
-          return { canvas: c, vp: vp };
+          storePageCache(pageNum, c, S.lastZoomBucket, rs);
+          return { canvas: c, vp: vp, rs: rs };
         }
         var rPrev, rNext;
         try {
-          rPrev = await renderFull(prevPage);
-          rNext = await renderFull(nextPage);
+          rPrev = await renderFull(prevPage, prevNum);
+          rNext = await renderFull(nextPage, nextNum);
         } catch (e) {
           return; // superseded or failed render
         }
@@ -5361,7 +5536,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
             ctx.rect(0, 0, canvasEl.width, canvasEl.height);
             ctx.clip();
             ctx.translate(-sx, -sy);
-            drawAnnotationsOnCanvas(ctx, items, dims.w, dims.h, rs);
+            drawAnnotationsOnCanvas(ctx, items, dims.w, dims.h, rendered.rs || rs);
             ctx.restore();
           }
         }
@@ -5369,8 +5544,8 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         var nv = S.boundaryViews.next;
         var midP = (pv.x0 + pv.x1) / 2;
         var midN = (nv.x0 + nv.x1) / 2;
-        var prevDims = { w: rPrev.vp.width / rs, h: rPrev.vp.height / rs };
-        var nextDims = { w: rNext.vp.width / rs, h: rNext.vp.height / rs };
+        var prevDims = { w: rPrev.vp.width / rPrev.rs, h: rPrev.vp.height / rPrev.rs };
+        var nextDims = { w: rNext.vp.width / rNext.rs, h: rNext.vp.height / rNext.rs };
         // Right pane: previous page, second half (its left half in x).
         fillPane($("half-canvas-right"), rPrev,
           { x0: pv.x0, y0: pv.y0, x1: midP, y1: pv.y1 },
@@ -5387,6 +5562,25 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         var canvas = $("pdf-canvas");
         var pdfPage = S.currentPdfPage;
         if (!canvas || !pdfPage || !S.pageDims) return;
+        var pageAtRender = S.page;
+        var neededBucket = S.lastZoomBucket;
+        var cached = S.pageCache.get(pageAtRender);
+        if (cached && cached.bucket >= neededBucket - 0.01) {
+          // Preloaded (or previously rendered) page: copy the cached
+          // bitmap instead of re-rendering — page turns are instant.
+          if (renderTask) { try { renderTask.cancel(); } catch (e) {} renderTask = null; }
+          canvas.width = cached.canvas.width;
+          canvas.height = cached.canvas.height;
+          var bctx = canvas.getContext("2d");
+          if (!bctx) return;
+          bctx.drawImage(cached.canvas, 0, 0);
+          if (!S.cropCache.has(pageAtRender)) {
+            S.cropCache.set(pageAtRender, detectInkBox(canvas));
+          }
+          var rawC = S.cropCache.get(pageAtRender);
+          S.cropBox = rawC ? padInkBox(rawC, CROP_PAD) : null;
+          return;
+        }
         if (renderTask) { try { renderTask.cancel(); } catch (e) {} }
         var dpr = Math.min(window.devicePixelRatio || 1, 2);
         var rs = Math.max(0.5, S.lastZoomBucket * dpr);
@@ -5396,7 +5590,6 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         canvas.height = Math.round(viewport.height);
         var ctx = canvas.getContext("2d");
         if (!ctx) return;
-        var pageAtRender = S.page;
         var task = pdfPage.render({ canvasContext: ctx, viewport: viewport });
         renderTask = task;
         try {
@@ -5405,6 +5598,8 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           return; // cancelled render
         }
         if (S.page !== pageAtRender) return;
+        // Keep this render as the page's cache entry for later turns.
+        storePageCache(pageAtRender, canvas, neededBucket, rs);
         if (!S.cropCache.has(pageAtRender)) {
           var raw = detectInkBox(canvas);
           S.cropCache.set(pageAtRender, raw);

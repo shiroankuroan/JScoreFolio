@@ -322,6 +322,7 @@
           <ul>
             <li>開いた楽譜は、余白を自動で除いて拡大表示します（下のバーの「余白カット」で切り替え）。</li>
             <li>楽譜を開くと、全ページを最初に読み込んで描画の控えを作ります（上のバーに「全ページ先読み中 ○ / ○」と進み具合が出ます）。先読みが終わったページへのページ送りは、描画し直さず即座に表示されます。先読みの途中でもページ送りはできます。</li>
+            <li>楽譜を開いたまま画面をロックしたり、アプリが終了してしまったりしても、次に開いたときは同じ楽譜の同じページが自動で表示されます（半ページの境目表示の途中だった場合も、その位置から再開します）。ライブラリ一覧に戻ってから閉じた場合は、次回は一覧から始まります。</li>
             <li>「見る」モードで画面の中央あたりをタップすると、ボタン類を隠して楽譜だけを表示できます（もう一度タップで戻ります）。</li>
             <li>楽譜はドラッグでは動きません。拡大・縮小は2本指のピンチか、下のバーの ＋／－ で行います。</li>
             <li>右側の道具から「文字」を選んでページをタップすると、縦書きコメントを置けます。入力中は、文字が入る場所が点線の四角で楽譜の上に表示されます。</li>
@@ -5078,7 +5079,47 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         hintTimer = setTimeout(function () { hint.classList.remove("show"); }, ms || 4200);
       }
 
-      async function openViewer(docId) {
+      /* ---------------- session restore ----------------
+         While a score is open, remember which document is open and where
+         (page, and whether the half-page boundary view is showing) in
+         localStorage. If Android kills the app process while the screen
+         is locked, the page reloads from scratch; on startup the saved
+         session reopens the same score at the same place. Closing the
+         score back to the library clears the session, so the next launch
+         starts at the library. */
+      var SESSION_KEY = "score-viewer:session";
+      function saveSession() {
+        if (S.screen !== "viewer" || S.docId == null) return;
+        try {
+          localStorage.setItem(SESSION_KEY, JSON.stringify({
+            docId: S.docId,
+            page: S.page,
+            boundary: !!S.boundary,
+          }));
+        } catch (e) { /* storage unavailable */ }
+      }
+      function clearSession() {
+        try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
+      }
+      function readSession() {
+        try {
+          var raw = localStorage.getItem(SESSION_KEY);
+          if (!raw) return null;
+          var s = JSON.parse(raw);
+          if (!s || typeof s.docId !== "number" || typeof s.page !== "number") return null;
+          return s;
+        } catch (e) { return null; }
+      }
+      async function restoreSession() {
+        var sess = readSession();
+        if (!sess) return;
+        var rec = null;
+        try { rec = await dbGetDocument(sess.docId); } catch (e) { rec = null; }
+        if (!rec) { clearSession(); return; } // score was deleted: start normally
+        await openViewer(sess.docId, { page: sess.page, boundary: sess.boundary });
+      }
+
+      async function openViewer(docId, restore) {
         var rec;
         try {
           rec = await dbGetDocument(docId);
@@ -5093,6 +5134,14 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         S.currentPdfPage = null;
         S.boundary = false;
         S.boundaryNextPdfPage = null;
+        if (restore) {
+          var rp = Math.floor(Number(restore.page));
+          if (isFinite(rp) && rp >= 1) S.page = rp;
+          if (S.pageCount && S.page > S.pageCount) S.page = S.pageCount;
+          // Boundary position only counts in half-page mode, before the
+          // last page; isBoundary() enforces the same conditions.
+          S.boundary = !!restore.boundary;
+        }
         S.boundaryViews = null;
         S.itemsByPage = {};
         S.cropCache = new Map();
@@ -5128,7 +5177,10 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           if (S.docId !== docId) { try { await doc.destroy(); } catch (e) {} return; }
           S.pdfDoc = doc;
           S.pageCount = doc.numPages;
+          if (S.page > S.pageCount) S.page = S.pageCount;
+          if (S.page >= S.pageCount) S.boundary = false;
           await loadCurrentPage();
+          saveSession();
           startPreload();
         } catch (e) {
           showStageMsg("PDFを読み込めませんでした");
@@ -5137,6 +5189,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
       }
 
       function closeViewer() {
+        clearSession();
         if (renderTask) { try { renderTask.cancel(); } catch (e) {} renderTask = null; }
         preloadSeq++;
         updatePreloadStatus(0, 0, false);
@@ -5780,6 +5833,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           if (S.mode !== "view") { S.mode = "view"; updateToolUI(); }
         }
         syncBoundaryUI();
+        saveSession();
         loadCurrentPage();
       }
 
@@ -5787,6 +5841,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         S.halfMode = !!on;
         if (!S.halfMode) S.boundary = false;
         try { localStorage.setItem("score-viewer:half-mode", S.halfMode ? "1" : "0"); } catch (e) { /* ignore */ }
+        saveSession();
         S.pan = { x: 0, y: 0 };
         S.userZoom = 1;
         S.draft = null;
@@ -6750,7 +6805,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         }
         window.addEventListener("resize", updateSize);
 
-        refreshLibrary().then(function () { maybeImportSample(); });
+        refreshLibrary().then(function () { return restoreSession(); }).then(function () { maybeImportSample(); });
         bootPdfjs().catch(function () { /* PDF features report errors on use */ });
       }
 

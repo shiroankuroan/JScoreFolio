@@ -223,6 +223,23 @@
       .seg-btn[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
       .seg-btn.soft[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
       .opt-hint { font-size: 12px; color: var(--dim); margin: 0; }
+      .preset-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+      .preset-chip {
+        display: inline-flex; align-items: center; gap: 6px; max-width: 190px;
+        border-radius: 999px; border: 1px solid var(--border); padding: 8px 12px;
+        font-size: 14px; background: var(--surface); color: var(--text);
+      }
+      .preset-chip .dot { width: 12px; height: 12px; border-radius: 999px; flex-shrink: 0; }
+      .preset-chip .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .preset-chip[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+      .preset-chip.empty { color: var(--dim); border-style: dashed; }
+      .preset-slot { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+      .preset-slot-title { margin: 0; font-size: 14px; font-weight: 600; }
+      .preset-text {
+        width: 100%; margin-top: 8px; border-radius: 8px; border: 1px solid var(--border);
+        background: var(--bg); color: var(--text); padding: 10px 12px; font-size: 16px;
+        font-family: var(--font-goth); resize: vertical;
+      }
       .size-slider-wrap { display: flex; flex: 1; min-width: 230px; align-items: center; gap: 10px; }
       .size-slider-wrap .size-label { flex-shrink: 0; font-size: 13px; color: var(--dim); }
       .size-slider-wrap input[type="range"] { flex: 1; min-width: 0; height: 40px; accent-color: var(--accent); cursor: pointer; }
@@ -325,7 +342,8 @@
             <li>楽譜を開いたまま画面をロックしたり、アプリが終了してしまったりしても、次に開いたときは同じ楽譜の同じページが自動で表示されます（半ページの境目表示の途中だった場合も、その位置から再開します）。ライブラリ一覧に戻ってから閉じた場合は、次回は一覧から始まります。</li>
             <li>「見る」モードで画面の中央あたりをタップすると、ボタン類を隠して楽譜だけを表示できます（もう一度タップで戻ります）。</li>
             <li>楽譜はドラッグでは動きません。拡大・縮小は2本指のピンチか、下のバーの ＋／－ で行います。</li>
-            <li>右側の道具から「文字」を選んでページをタップすると、縦書きコメントを置けます。入力中は、文字が入る場所が点線の四角で楽譜の上に表示されます。</li>
+            <li>右側の道具から「文字」を選んでページをタップすると、縦書きコメントを置けます。入力中は、文字が入る場所が点線の四角で楽譜の上に表示されます。文字の大きさは最大30ptです。</li>
+            <li>よく使う文は、道具の「定型文」に5つまで登録できます（文字列・色・大きさをセットで登録）。定型文を選んで、置きたい場所をタップするだけで、その文がそのまま置けます。登録は「定型文」を選んだときに出る「登録・編集」から行います。</li>
             <li>置いた文字や引いた線は、道具の「動かす」でドラッグして、あとから好きな場所へ調整できます（線は「直線」「ペン」のどちらも動かせます）。</li>
             <li>右側の道具（エディットツール）自体も、上部の点々のつまみをドラッグすると、画面内の好きな場所へ動かせます（位置は次回も保持されます）。つまみをダブルタップすると、元の位置（右側の中央）に戻ります。</li>
             <li>「直線」は縦・横にそろえて引けます。「ペン」は自由な線です。</li>
@@ -376,6 +394,7 @@
           <button type="button" class="tool-btn" data-tool="line" aria-pressed="false"><span class="glyph" aria-hidden="true">／</span>直線</button>
           <button type="button" class="tool-btn" data-tool="pen" aria-pressed="false"><span class="glyph" aria-hidden="true">✎</span>ペン</button>
           <button type="button" class="tool-btn" data-tool="text" aria-pressed="false"><span class="glyph" aria-hidden="true">文</span>文字</button>
+          <button type="button" class="tool-btn" data-tool="preset" aria-pressed="false"><span class="glyph" aria-hidden="true">定</span>定型文</button>
           <button type="button" class="tool-btn" data-tool="move" aria-pressed="false"><span class="glyph" aria-hidden="true">✥</span>動かす</button>
           <button type="button" class="tool-btn" data-tool="erase" aria-pressed="false"><span class="glyph" aria-hidden="true">⌫</span>消す</button>
           <div class="rail-sep"></div>
@@ -392,7 +411,12 @@
           <button type="button" class="seg-btn" data-width="2" aria-pressed="false">太</button>
         </div>
         <button type="button" class="seg-btn soft hidden" id="opt-snap" aria-pressed="true">縦横にそろえる ON</button>
+        <div class="preset-group hidden" id="opt-presets" role="group" aria-label="定型文">
+          <div class="preset-group" id="preset-chips"></div>
+          <button type="button" class="seg-btn soft" id="btn-preset-edit">登録・編集</button>
+        </div>
         <p class="opt-hint hidden" id="opt-text-hint">ページをタップした場所に、縦書きで文字を置きます（入力中は、入る場所が点線の四角で表示されます）</p>
+        <p class="opt-hint hidden" id="opt-preset-hint">定型文を選んで、置きたい場所をタップすると、その文が登録した色・大きさでそのまま置かれます。続けてタップすれば同じ文を何度でも置けます</p>
         <p class="opt-hint hidden" id="opt-move-hint">文字や線をドラッグすると、好きな位置へ動かせます（ドラッグ中は右側の道具が隠れます）</p>
       </div>
 
@@ -423,7 +447,7 @@
           <div class="color-group" id="editor-colors" role="group" aria-label="文字の色"></div>
           <div class="size-slider-wrap">
             <span class="size-label" id="editor-size-label">文字サイズ</span>
-            <input type="range" id="editor-size-range" min="8" max="64" step="1" value="24" aria-labelledby="editor-size-label" aria-describedby="editor-size-value" />
+            <input type="range" id="editor-size-range" min="8" max="30" step="1" value="24" aria-labelledby="editor-size-label" aria-describedby="editor-size-value" />
             <span class="size-value" id="editor-size-value">24 pt</span>
           </div>
         </div>
@@ -434,6 +458,20 @@
           <button type="button" id="editor-save" class="btn-sheet-accent">保存</button>
         </div>
         <p class="export-note">楽譜の上の点線の四角が、文字の入る場所と大きさです。保存したあとでも、道具の「動かす」で四角をドラッグして位置を変えられます。</p>
+      </div>
+    </div>
+
+    <!-- ================= preset phrases sheet ================= -->
+    <div id="preset-sheet" class="sheet-backdrop hidden">
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="preset-title">
+        <h2 id="preset-title">定型文の登録</h2>
+        <p class="export-note">よく使う文を5つまで登録できます。文字列・色・大きさをセットで登録しておくと、道具の「定型文」で選んで、置きたい場所をタップするだけで置けます。空欄のまま保存すると未登録になります。登録内容はこの端末の中だけに保存されます。</p>
+        <div id="preset-slots"></div>
+        <div class="sheet-actions">
+          <div class="spacer"></div>
+          <button type="button" id="preset-cancel" class="btn-sheet">キャンセル</button>
+          <button type="button" id="preset-save" class="btn-sheet-accent">保存</button>
+        </div>
       </div>
     </div>
 
@@ -4808,6 +4846,8 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         draft: null,
         itemDrag: null,
         editor: null,
+        presetIndex: -1,
+        presets: [],
         settingsOpen: false,
         pedalReversed: false,
         saveState: "saved",
@@ -4821,6 +4861,44 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         S.pedalReversed = localStorage.getItem("score-viewer:pedal-reversed") === "1";
         S.halfMode = localStorage.getItem("score-viewer:half-mode") === "1";
       } catch (e) { /* storage unavailable */ }
+
+      /* ---------------- preset phrases （定型文） ----------------
+         Up to five ready-made comments, each a { text, color, size }
+         triple, kept in localStorage like the other small settings.
+         An empty text means the slot is not registered yet. Text size
+         follows the same 8–30pt range as the comment editor. */
+      var PRESET_COUNT = 5;
+      var PRESETS_KEY = "score-viewer:presets";
+      var TEXT_SIZE_MIN = 8;
+      var TEXT_SIZE_MAX = 30;
+      function clampTextSize(v) {
+        var n = Math.round(Number(v));
+        if (!isFinite(n)) n = 24;
+        return Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, n));
+      }
+      function emptyPreset() {
+        return { text: "", color: ANNOTATION_COLORS[0].hex, size: 24 };
+      }
+      function loadPresets() {
+        var raw = null;
+        try { raw = JSON.parse(localStorage.getItem(PRESETS_KEY) || "null"); } catch (e) { raw = null; }
+        var list = [];
+        for (var i = 0; i < PRESET_COUNT; i++) {
+          var p = raw && raw[i] ? raw[i] : null;
+          list.push(p && typeof p.text === "string"
+            ? {
+                text: p.text,
+                color: typeof p.color === "string" ? p.color : ANNOTATION_COLORS[0].hex,
+                size: clampTextSize(p.size),
+              }
+            : emptyPreset());
+        }
+        return list;
+      }
+      function savePresets() {
+        try { localStorage.setItem(PRESETS_KEY, JSON.stringify(S.presets)); } catch (e) { /* ignore */ }
+      }
+      S.presets = loadPresets();
 
       /* Half-page mode: page turns alternate between a full page and a
          boundary view (second half of one page + first half of the next).
@@ -5199,6 +5277,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         S.docId = null;
         S.currentPdfPage = null;
         closeEditor();
+        closePresetSheet();
         closeSettings();
         showScreen("library");
         refreshLibrary();
@@ -5955,7 +6034,7 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         };
       }
       function effWidth() { return pageW() * (WIDTH_LEVELS[S.widthLevel] || 0.008); }
-      function defaultTextSize() { return Math.round(pageW() * (SIZE_LEVELS[1] || 0.046)); }
+      function defaultTextSize() { return Math.min(TEXT_SIZE_MAX, Math.round(pageW() * (SIZE_LEVELS[1] || 0.046))); }
 
       /* Hide the tool rail while a drag is in progress, so it does not
          cover the comment being moved toward the right edge of the page. */
@@ -6108,6 +6187,14 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
             openEditor({ id: hit.id, x: hit.x, y: hit.y, text: hit.text, color: hit.color, size: hit.size });
           } else {
             openEditor({ x: p.x, y: p.y, text: "", color: S.color, size: defaultTextSize() });
+          }
+        } else if (S.mode === "preset") {
+          // Place the armed preset phrase as-is at the tapped point.
+          var pr = S.presetIndex >= 0 && S.presets ? S.presets[S.presetIndex] : null;
+          if (pr && pr.text.trim() !== "") {
+            commitItems(currentItems().concat([{
+              id: newId(), kind: "text", color: pr.color, x: p.x, y: p.y, text: pr.text, size: pr.size,
+            }]));
           }
         } else if (S.mode === "move") {
           var hitM = hitTest(currentItems(), p, pageW(), pageH());
@@ -6363,12 +6450,13 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         prev.style.fontSize = S.editor.size + "px";
         var pt = Math.round(S.editor.size);
         var range = $("editor-size-range");
-        if (range) range.value = String(Math.min(64, Math.max(8, pt)));
+        if (range) range.value = String(clampTextSize(pt));
         var val = $("editor-size-value");
         if (val) val.textContent = pt + " pt";
         drawAnnotations(); // keep the on-page placement guide in sync
       }
       function openEditor(ed) {
+        ed.size = clampTextSize(ed.size);
         S.editor = ed;
         $("editor-title").textContent = ed.id ? "コメントを編集" : "縦書きコメント";
         $("editor-text").value = ed.text;
@@ -6400,6 +6488,131 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           }]));
         }
         closeEditor();
+      }
+
+      /* ---------------- preset phrases （定型文） ----------------
+         Chips in the options bar arm one registered phrase; tapping the
+         page then stamps it there with its own color and size (handled
+         in onPointerDown). The registration sheet edits all five slots
+         on a draft copy and writes them back on 保存. */
+      function buildPresetChips() {
+        var wrap = $("preset-chips");
+        if (!wrap) return;
+        wrap.innerHTML = "";
+        (S.presets || []).forEach(function (p, i) {
+          var b = document.createElement("button");
+          b.type = "button";
+          var empty = !p.text || p.text.trim() === "";
+          b.className = "preset-chip" + (empty ? " empty" : "");
+          b.setAttribute("aria-pressed", S.presetIndex === i && !empty ? "true" : "false");
+          if (!empty) {
+            var dot = document.createElement("span");
+            dot.className = "dot";
+            dot.style.background = p.color;
+            dot.setAttribute("aria-hidden", "true");
+            b.appendChild(dot);
+          }
+          var lbl = document.createElement("span");
+          lbl.className = "lbl";
+          lbl.textContent = empty ? "定型文" + (i + 1) + "（未登録）" : p.text.replace(/\n/g, " ");
+          b.appendChild(lbl);
+          b.setAttribute("aria-label", empty
+            ? "定型文" + (i + 1) + "は未登録です。タップで登録画面を開きます"
+            : "定型文" + (i + 1) + ": " + p.text + "（" + p.size + "pt）");
+          b.addEventListener("click", function () {
+            if (empty) { openPresetSheet(i); return; }
+            S.presetIndex = i;
+            buildPresetChips();
+          });
+          wrap.appendChild(b);
+        });
+      }
+
+      var presetDraft = null;
+      function openPresetSheet(focusIndex) {
+        presetDraft = (S.presets || []).map(function (p) {
+          return { text: p.text, color: p.color, size: p.size };
+        });
+        var slots = $("preset-slots");
+        slots.innerHTML = "";
+        presetDraft.forEach(function (p, i) {
+          var slot = document.createElement("div");
+          slot.className = "preset-slot";
+          var title = document.createElement("p");
+          title.className = "preset-slot-title";
+          title.textContent = "定型文 " + (i + 1);
+          slot.appendChild(title);
+          var ta = document.createElement("textarea");
+          ta.className = "preset-text";
+          ta.rows = 2;
+          ta.value = p.text;
+          ta.setAttribute("aria-label", "定型文" + (i + 1) + "の文字列");
+          ta.placeholder = "ここに入力（縦書きで置かれます）";
+          ta.addEventListener("input", function () { presetDraft[i].text = ta.value; });
+          slot.appendChild(ta);
+          var groups = document.createElement("div");
+          groups.className = "sheet-groups";
+          var colors = document.createElement("div");
+          colors.className = "color-group";
+          colors.setAttribute("role", "group");
+          colors.setAttribute("aria-label", "定型文" + (i + 1) + "の色");
+          groups.appendChild(colors);
+          var sizeWrap = document.createElement("div");
+          sizeWrap.className = "size-slider-wrap";
+          var sizeLabel = document.createElement("span");
+          sizeLabel.className = "size-label";
+          sizeLabel.textContent = "文字サイズ";
+          var range = document.createElement("input");
+          range.type = "range";
+          range.min = String(TEXT_SIZE_MIN);
+          range.max = String(TEXT_SIZE_MAX);
+          range.step = "1";
+          range.value = String(clampTextSize(p.size));
+          range.setAttribute("aria-label", "定型文" + (i + 1) + "の文字サイズ");
+          var val = document.createElement("span");
+          val.className = "size-value";
+          val.textContent = clampTextSize(p.size) + " pt";
+          range.addEventListener("input", function () {
+            presetDraft[i].size = Number(range.value);
+            val.textContent = range.value + " pt";
+          });
+          sizeWrap.appendChild(sizeLabel);
+          sizeWrap.appendChild(range);
+          sizeWrap.appendChild(val);
+          groups.appendChild(sizeWrap);
+          slot.appendChild(groups);
+          slots.appendChild(slot);
+          var paintColors = function () {
+            buildColorButtons(colors,
+              function () { return presetDraft[i].color; },
+              function (hex) { presetDraft[i].color = hex; paintColors(); });
+          };
+          paintColors();
+        });
+        $("preset-sheet").classList.remove("hidden");
+        if (typeof focusIndex === "number" && focusIndex >= 0) {
+          var tas = slots.querySelectorAll("textarea");
+          if (tas[focusIndex]) setTimeout(function () { tas[focusIndex].focus(); }, 50);
+        }
+      }
+      function closePresetSheet() {
+        presetDraft = null;
+        $("preset-sheet").classList.add("hidden");
+      }
+      function savePresetSheet() {
+        if (!presetDraft) { closePresetSheet(); return; }
+        S.presets = presetDraft.map(function (p) {
+          return {
+            text: (p.text || "").replace(/[ \t]+$/gm, "").replace(/\n+$/, ""),
+            color: p.color,
+            size: clampTextSize(p.size),
+          };
+        });
+        savePresets();
+        var cur = S.presetIndex >= 0 ? S.presets[S.presetIndex] : null;
+        if (!cur || cur.text.trim() === "") S.presetIndex = firstPresetIndex();
+        closePresetSheet();
+        if (S.mode === "preset") buildPresetChips();
       }
 
       /* ---------------- header / footer / tools UI ---------------- */
@@ -6441,20 +6654,36 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
         cancelItemDrag();
         S.mode = mode;
         S.draft = null;
+        if (mode === "preset") {
+          // Arm the first registered phrase when none (or an emptied
+          // one) is selected, so the flow is: pick tool, tap, done.
+          var cur = S.presets && S.presetIndex >= 0 ? S.presets[S.presetIndex] : null;
+          if (!cur || cur.text.trim() === "") S.presetIndex = firstPresetIndex();
+        }
         drawAnnotations();
         updateToolUI();
+      }
+      function firstPresetIndex() {
+        if (!S.presets) return -1;
+        for (var i = 0; i < S.presets.length; i++) {
+          if (S.presets[i].text.trim() !== "") return i;
+        }
+        return -1;
       }
       function updateToolUI() {
         Array.prototype.forEach.call($("tool-rail").querySelectorAll("[data-tool]"), function (b) {
           b.setAttribute("aria-pressed", b.getAttribute("data-tool") === S.mode ? "true" : "false");
         });
-        var showOpts = !isBoundary() && (S.mode === "line" || S.mode === "pen" || S.mode === "text" || S.mode === "move");
+        var showOpts = !isBoundary() && (S.mode === "line" || S.mode === "pen" || S.mode === "text" || S.mode === "preset" || S.mode === "move");
         $("tool-options").classList.toggle("hidden", !showOpts);
-        $("opt-widths").classList.toggle("hidden", S.mode === "text" || S.mode === "move");
+        $("opt-widths").classList.toggle("hidden", S.mode === "text" || S.mode === "preset" || S.mode === "move");
         $("opt-snap").classList.toggle("hidden", S.mode !== "line");
         $("opt-text-hint").classList.toggle("hidden", S.mode !== "text");
+        $("opt-preset-hint").classList.toggle("hidden", S.mode !== "preset");
+        $("opt-presets").classList.toggle("hidden", S.mode !== "preset");
+        if (S.mode === "preset") buildPresetChips();
         $("opt-move-hint").classList.toggle("hidden", S.mode !== "move");
-        $("opt-colors").classList.toggle("hidden", S.mode === "move");
+        $("opt-colors").classList.toggle("hidden", S.mode === "move" || S.mode === "preset");
         var snapBtn = $("opt-snap");
         snapBtn.textContent = "縦横にそろえる " + (S.snap ? "ON" : "OFF");
         snapBtn.setAttribute("aria-pressed", S.snap ? "true" : "false");
@@ -6791,6 +7020,9 @@ t)).default()}catch(e){warn(`JpxImage#getJsModule: ${e}`)}e(a)}static async#E(e,
           S.editor.size = Number(e.target.value);
           syncEditorPreview();
         });
+        $("btn-preset-edit").addEventListener("click", function () { openPresetSheet(-1); });
+        $("preset-cancel").addEventListener("click", closePresetSheet);
+        $("preset-save").addEventListener("click", savePresetSheet);
         $("editor-cancel").addEventListener("click", closeEditor);
         $("editor-save").addEventListener("click", saveEditor);
         $("editor-delete").addEventListener("click", function () {
